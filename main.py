@@ -83,7 +83,7 @@ async def main(): # ফাংশনটিকে async করা হয়েছে
 if __name__ == "__main__":
     
     # বট চালু করার আগে চেক করুন সব এনভায়রনমেন্ট ভেরিয়েবল ঠিক আছে কিনা
-    if not all([config.BOT_TOKEN, config.ADMIN_ID, config.DB_C_ID, config.RBG_API, config.SE_API_USER, config.SE_API_SECRET]):
+    if not all([config.BOT_TOKEN, config.ADMIN_IDS, config.DB_C_ID, config.RBG_API, config.SE_API_USER, config.SE_API_SECRET]):
         logger.error("ERROR: Environment variables are not set correctly. Please check config.py or env variables.")
     elif not RENDER_EXTERNAL_HOSTNAME:
          logger.error("ERROR: RENDER_EXTERNAL_HOSTNAME is not set. Are you running on Render?")

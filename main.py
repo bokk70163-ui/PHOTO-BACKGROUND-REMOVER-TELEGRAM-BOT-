@@ -9,6 +9,7 @@ import telegram
 import urllib.request
 from flask import Flask, request
 
+# টেলিগ্রাম লাইব্রেরি ইম্পোর্ট
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -17,7 +18,6 @@ from telegram.ext import (
     PicklePersistence,
     filters
 )
-from telegram.constants import ChatType
 
 server = Flask(__name__)
 
@@ -25,6 +25,7 @@ def setup_bot():
     """
     Sets up the bot application and adds all handlers.
     """
+    # পারসিসটেন্স সেটআপ (যদি আপনার bot_persistence ফাইল থাকে)
     persistence = PicklePersistence(filepath='bot_persistence')
 
     application = (Application.builder()
@@ -56,65 +57,55 @@ def setup_bot():
 
     return application
 
-# --- অ্যাপ্লিকেশনটি তৈরি করুন ---
+# গ্লোবাল অ্যাপ্লিকেশন অবজেক্ট তৈরি
 application = setup_bot()
 
-# --- নতুন ফিক্স: অ্যাপ্লিকেশনটি গ্লোবালি Initialize করুন ---
-# Gunicorn সার্ভার চালু করার আগেই এটি রান হবে
-print("Initializing bot application...")
-asyncio.run(application.initialize())
-print("Bot application initialized.")
-# --- ফিক্স শেষ ---
-
-
 @server.route('/' + config.BOT_TOKEN, methods=['POST'])
-def webhook_update():
+async def webhook_update():
     """
-    Handles updates from Telegram.
+    Handles updates from Telegram properly with async/await.
     """
+    # অ্যাপ্লিকেশন যদি ইনিশিলাইজ না থাকে, তবে করে নিতে হবে
+    if not application._initialized:
+        await application.initialize()
+
     update_json = request.get_json()
-    update = telegram.Update.de_json(update_json, application.bot)
     
-    try:
-        loop = asyncio.get_running_loop()
-        loop.create_task(application.process_update(update))
-    except RuntimeError:
-        # Gunicorn-এর sync worker-এ কোনো রানিং লুপ থাকে না, 
-        # তাই asyncio.run() ব্যবহার করা সঠিক
-        asyncio.run(application.process_update(update))
+    if update_json:
+        # JSON থেকে আপডেট অবজেক্ট তৈরি
+        update = telegram.Update.de_json(update_json, application.bot)
+        
+        # সরাসরি await ব্যবহার করে প্রসেস করা (asyncio.run ব্যবহার করবেন না)
+        await application.process_update(update)
             
     return "ok", 200
 
 @server.route("/")
 def set_webhook():
     """
-    Sets the webhook URL on bot startup.
+    Sets the webhook URL. Can be triggered manually or by a cron job.
     """
     host_url = os.environ.get("RENDER_EXTERNAL_HOSTNAME")
     if not host_url:
-        print("WARNING: RENDER_EXTERNAL_HOSTNAME not set. Webhook may fail.")
         return "Webhook setup failed: Host URL not found.", 500
 
     bot_url = f"https://{host_url}/{config.BOT_TOKEN}"
     api_url = f"https://api.telegram.org/bot{config.BOT_TOKEN}/"
     
-    req = urllib.request.Request(api_url + "setWebhook?url=" + bot_url)
     try:
+        req = urllib.request.Request(api_url + "setWebhook?url=" + bot_url)
         urllib.request.urlopen(req)
-        print(f"Webhook set successfully to {bot_url}")
-        return "Webhook set!", 200
+        return f"Webhook set successfully to {bot_url}", 200
     except Exception as e:
-        print(f"Webhook setup error: {e}")
         return f"Webhook error: {e}", 500
 
 if __name__ == "__main__":
+    # লোকাল টেস্ট এর জন্য
+    import uvicorn
     
-    if not all([config.BOT_TOKEN, config.ADMIN_IDS, config.DB_C_ID, config.RBG_API, config.SE_API_USER, config.SE_API_SECRET]):
-        print("ERROR: Environment variables are not set correctly. Please check.")
-        print("Missing one or more of: BOT_TOKEN, ADMIN_IDS, DB_C_ID, RBG_API, SE_API_USER, SE_API_SECRET")
-    else:
-        print("Configuration loaded successfully. Starting webhook server...")
-        # এই ব্লকটি সরাসরি 'python main.py' চালালে কাজ করবে
-        # Gunicorn এটি ব্যবহার করে না, তবে টেস্ট করার জন্য এটি রাখা ভালো
-        port = int(os.environ.get("PORT", 10000))
-        server.run(host="0.0.0.0", port=port)
+    if not all([config.BOT_TOKEN, config.ADMIN_IDS, config.DB_C_ID]):
+        print("WARNING: Some environment variables might be missing.")
+    
+    print("Starting server locally with Uvicorn...")
+    port = int(os.environ.get("PORT", 10000))
+    uvicorn.run(server, host="0.0.0.0", port=port)

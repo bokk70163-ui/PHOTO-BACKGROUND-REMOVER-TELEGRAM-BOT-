@@ -7,3 +7,4 @@ telegram
 Flask
 gunicorn
 urllib3
+uvicorn
